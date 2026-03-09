@@ -1,10 +1,12 @@
-
+#include "httplib.h"
+#include "json.hpp"
 #include <iostream>
 #include <vector>
 #include <ctime>
 #include <cstdlib>
 
 using namespace std;
+using json = nlohmann::json;
 
 class AstroVision
 {
@@ -23,7 +25,7 @@ public:
         place = p;
     }
 
-    // Function to generate zodiac sign (simple logic)
+    // Function to generate zodiac sign
     string getZodiac()
     {
         int day, month, year;
@@ -55,65 +57,107 @@ public:
             return "Pisces";
     }
 
+    // Validate date
+    bool isValid()
+    {
+        int day, month, year;
+        sscanf(dob.c_str(), "%d-%d-%d", &day, &month, &year);
+        return day >= 1 && day <= 31 &&
+               month >= 1 && month <= 12 &&
+               year >= 1900 && year <= 2100;
+    }
+
     // Career generator
-    void generateCareer()
+    json generateCareer()
     {
         vector<string> careers =
         {
-            "Software Engineer",
-            "Doctor",
-            "Data Scientist",
-            "Entrepreneur",
-            "Teacher",
-            "Astrologer",
-            "Digital Marketer",
-            "Civil Engineer",
-            "Graphic Designer",
-            "Psychologist",
-            "Content Creator",
-            "Research Scientist",
-            "Business Analyst",
-            "Lawyer"
+            "Software Engineer", "Doctor", "Data Scientist", "Entrepreneur",
+            "Teacher", "Astrologer", "Digital Marketer", "Civil Engineer",
+            "Graphic Designer", "Psychologist", "Content Creator",
+            "Research Scientist", "Business Analyst", "Lawyer"
         };
 
-        srand(time(0));
-
-        cout << "\n------ Career Prediction ------\n";
-        cout << "Name: " << name << endl;
-        cout << "Date of Birth: " << dob << endl;
-        cout << "Place of Birth: " << place << endl;
-        cout << "Zodiac Sign: " << getZodiac() << endl;
-
-        cout << "\nSuggested Career Options:\n";
-
-        for(int i=0;i<4;i++)
+        srand((unsigned)time(0));
+        vector<string> chosen;
+        vector<int> used;
+        while ((int)chosen.size() < 4)
         {
             int index = rand() % careers.size();
-            cout << "- " << careers[index] << endl;
+            bool duplicate = false;
+            for (int u : used) if (u == index) { duplicate = true; break; }
+            if (!duplicate)
+            {
+                chosen.push_back(careers[index]);
+                used.push_back(index);
+            }
         }
 
-        cout << "\nAstro Message:\n";
-        cout << "Your stars indicate strong potential. Choose a career that matches your passion and dedication.\n";
+        json result;
+        result["name"]               = name;
+        result["dob"]                = dob;
+        result["place_of_birth"]     = place;
+        result["zodiac_sign"]        = getZodiac();
+        result["career_suggestions"] = chosen;
+        result["astro_message"]      = "Your stars indicate strong potential, " + name +
+                                       "! Choose a career that matches your passion and dedication.";
+        return result;
     }
 };
 
 int main()
 {
-    string name,dob,place;
+    httplib::Server svr;
 
-    cout<<"Enter Name: ";
-    getline(cin,name);
+    svr.Get("/", [](const httplib::Request&, httplib::Response& res) {
+        res.set_content("AstroVision Career API is running! POST to /career", "text/plain");
+    });
 
-    cout<<"Enter Date of Birth (DD-MM-YYYY): ";
-    getline(cin,dob);
+    svr.Get("/career", [](const httplib::Request&, httplib::Response& res) {
+        json hint;
+        hint["usage"]   = "Send a POST request to /career";
+        hint["example"] = {{"name","Yashi"},{"dob","23-03-2000"},{"place","Rajasthan"}};
+        res.set_content(hint.dump(2), "application/json");
+    });
 
-    cout<<"Enter Place of Birth: ";
-    getline(cin,place);
+    svr.Post("/career", [](const httplib::Request& req, httplib::Response& res) {
+        json body;
+        try {
+            body = json::parse(req.body);
+        } catch (...) {
+            json err;
+            err["error"] = "Invalid JSON body";
+            res.status = 400;
+            res.set_content(err.dump(), "application/json");
+            return;
+        }
 
-    AstroVision user(name,dob,place);
+        if (!body.contains("name") || !body.contains("dob") || !body.contains("place")) {
+            json err;
+            err["error"] = "Missing fields. Required: name, dob (DD-MM-YYYY), place";
+            res.status = 400;
+            res.set_content(err.dump(), "application/json");
+            return;
+        }
 
-    user.generateCareer();
+        AstroVision user(body["name"], body["dob"], body["place"]);
 
+        if (!user.isValid()) {
+            json err;
+            err["error"] = "Invalid date. Use format DD-MM-YYYY";
+            res.status = 400;
+            res.set_content(err.dump(), "application/json");
+            return;
+        }
+
+        json result = user.generateCareer();
+        res.set_content(result.dump(2), "application/json");
+    });
+
+    const char* port_env = getenv("PORT");
+    int port = port_env ? atoi(port_env) : 8080;
+
+    cout << "AstroVision API running on port " << port << endl;
+    svr.listen("0.0.0.0", port);
     return 0;
-} 
- 
+}
