@@ -1,16 +1,31 @@
-﻿FROM ubuntu:22.04 AS builder
+﻿notepad Dockerfile
+```
+
+This will open the file. **Select all text (Ctrl+A), delete it**, and paste this exactly:
+```
+FROM ubuntu:22.04
+
 ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update && apt-get install -y g++ cmake libboost-all-dev libssl-dev zlib1g-dev git ca-certificates libasio-dev && apt-get clean
-RUN git clone --depth=1 https://github.com/CrowCpp/Crow.git /crow
-RUN cd /crow && mkdir build && cd build && cmake .. -DCROW_BUILD_EXAMPLES=OFF -DCROW_BUILD_TESTS=OFF && make install
+
+RUN apt-get update && apt-get install -y \
+    cmake \
+    g++ \
+    git \
+    libboost-all-dev \
+    libasio-dev \
+    libssl-dev \
+    zlib1g-dev \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
+
+COPY CMakeLists.txt .
 COPY career.cpp .
-RUN g++ -std=c++17 -O2 -I/usr/local/include career.cpp -o career_server -lboost_system -lpthread -lssl -lcrypto -lz
-RUN g++ -std=c++17 -O2 -I/usr/local/include career.cpp -o career_server -lboost_system -lpthread -lssl -lcrypto -lz
-FROM ubuntu:22.04 AS runtime
-ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update && apt-get install -y libboost-system1.74.0 libssl3 zlib1g && apt-get clean
-WORKDIR /app
-COPY --from=builder /app/career_server .
+
+RUN cmake -B build -DCMAKE_BUILD_TYPE=Release && \
+    cmake --build build --parallel
+
 EXPOSE 8080
-CMD ["./career_server"]
+
+CMD ["./build/career"]
