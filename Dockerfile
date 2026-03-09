@@ -1,8 +1,4 @@
-﻿notepad Dockerfile
-```
-
-This will open the file. **Select all text (Ctrl+A), delete it**, and paste this exactly:
-```
+﻿@"
 FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -29,3 +25,4 @@ RUN cmake -B build -DCMAKE_BUILD_TYPE=Release && \
 EXPOSE 8080
 
 CMD ["./build/career"]
+"@ | Set-Content Dockerfile
